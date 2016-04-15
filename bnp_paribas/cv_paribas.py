@@ -16,7 +16,7 @@ from ml_utilities import *
 
 # --------------------------------------------------------------------------------
 #
-def evalauc(preds, dtrain):
+def evallogloss(preds, dtrain):
     
     labels = dtrain.get_label()
     
@@ -24,7 +24,7 @@ def evalauc(preds, dtrain):
 
 # --------------------------------------------------------------------------------
 #
-def do_train(X, Y, initial_eta, min_eta, verbose=False):
+def do_train(X, Y, params, verbose=False):
 
     np.random.seed(1)
     random.seed(1)
@@ -39,25 +39,9 @@ def do_train(X, Y, initial_eta, min_eta, verbose=False):
     
         fold = fold + 1
                     
-        y_pred              = []
-    
         X_train, X_valid    = X[train_index,:], X[cv_index,:]
         y_train, y_valid    = Y[train_index],   Y[cv_index]
     
-        params = {
-                "max_depth"             : 5, 
-                "eta"                   : initial_eta,
-                "min_eta"               : min_eta,
-                "eta_decay"             : 0.5,
-                "max_fails"             : 3,
-                "early_stopping_rounds" : 20,
-                "objective"             : 'binary:logistic',
-                "subsample"             : 0.8, 
-                "colsample_bytree"      : 1.0,
-                "n_jobs"                : -1,
-                "n_estimators"          : 5000, 
-                "silent"                : 1
-                }
     
         num_round       = params["n_estimators"]
         eta             = params["eta"]
@@ -88,7 +72,7 @@ def do_train(X, Y, initial_eta, min_eta, verbose=False):
                                       num_round, 
                                       [(dtrain, 'train'), (dvalid,'valid')], 
                                       early_stopping_rounds=early_stop,
-                                      feval=evalauc )
+                                      feval=evallogloss )
     
             rounds          = model.best_iteration + 1
             total_rounds   += rounds
@@ -142,42 +126,50 @@ def main():
     te = te.drop(['ID'],axis=1)
 
     # This seems to be a canonical list of data to avoid...
-    tr = tr.drop(['v8','v23','v25','v31','v36','v37','v46','v51','v53','v54','v63','v73','v75','v79','v81','v82','v89','v92','v95','v105','v107','v108','v109','v110','v116','v117','v118','v119','v123','v124','v128'],axis=1)
-    te = te.drop(['v8','v23','v25','v31','v36','v37','v46','v51','v53','v54','v63','v73','v75','v79','v81','v82','v89','v92','v95','v105','v107','v108','v109','v110','v116','v117','v118','v119','v123','v124','v128'],axis=1)
+    #tr = tr.drop(['v8','v23','v25','v31','v36','v37','v46','v51','v53','v54','v63','v73','v75','v79','v81','v82','v89','v92','v95','v105','v107','v108','v109','v110','v116','v117','v118','v119','v123','v124','v128'],axis=1)
+    #te = te.drop(['v8','v23','v25','v31','v36','v37','v46','v51','v53','v54','v63','v73','v75','v79','v81','v82','v89','v92','v95','v105','v107','v108','v109','v110','v116','v117','v118','v119','v123','v124','v128'],axis=1)
 
     tr = randomised_imputer(tr)
     te = randomised_imputer(te)
     
     Y = target.values  #train.target.values.astype(np.int32)
     X = tr.values      #train[ [ "VAR_0001", "VAR_0005", "VAR_0006", "VAR_0226"] ].values
-    
+   
+    params = {
+            "max_depth"             : 5, 
+            "eta"                   : 0.1,
+            "min_eta"               : 0.00001,
+            "eta_decay"             : 0.5,
+            "max_fails"             : 3,
+            "early_stopping_rounds" : 20,
+            "objective"             : 'binary:logistic',
+            "subsample"             : 0.8, 
+            "colsample_bytree"      : 1.0,
+            "n_jobs"                : -1,
+            "n_estimators"          : 5000, 
+            "silent"                : 1,
+            "gamma"                 : 0.1,
+            "min_child_weight"      : 1.1
+            }
+    output_name = "pred_cv_{0}_{1}_{2}_{3}_{4}".format(params["eta"], params["n_estimators"], 
+                                                    params["max_depth"], params["gamma"], params["min_child_weight"])
+
     print("\nWithout decay ...\n")
-    best_model_nd = do_train(X, Y, 0.1, 0.1)
+    best_model_nd = do_train(X, Y, params)
 
     dte = xgb.DMatrix(te.values)
     te_pred_nd = best_model_nd.predict(dte, ntree_limit=best_model_nd.best_iteration+1)
     
     # Save results
-    predictions_file = open("cv_results_no_decay.csv", "w")
+    predictions_file = open(output_name + ".csv", "w")
     open_file_object = csv.writer(predictions_file)
     open_file_object.writerow(["ID", "PredictedProb"])
     open_file_object.writerows(zip(IDs, te_pred_nd))
     predictions_file.close()
 
-    print("\nWith decay ...\n")   
-    best_model_d = do_train(X, Y, 0.1, 0.00001)
-    te_pred_d = best_model_d.predict(dte, ntree_limit=best_model_d.best_iteration+1)
-    
-    # Save results
-    predictions_file = open("cv_results_with_decay.csv", "w")
-    open_file_object = csv.writer(predictions_file)
-    open_file_object.writerow(["ID", "PredictedProb"])
-    open_file_object.writerows(zip(IDs, te_pred_d))
-    predictions_file.close()
 
 # --------------------------------------------------------------------------------
 #
 if __name__ == '__main__':
 
     main()
-                
