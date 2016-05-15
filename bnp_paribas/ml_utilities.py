@@ -28,14 +28,14 @@ def split_by_nulls(df, col_null_ratio = 0.5, row_null_ratio = 0.99):
     
     for col_name, col in df_null.iteritems():
         # Check out how many nulls in each column
-        #print col_name, col.isnull().sum()
+        #print(col_name, col.isnull().sum())
         if col.isnull().sum() > row_null_ratio * df_null.shape[0]:
             df_null = df_null.drop(col_name, axis=1)
     
     return (df_full, df_null, full_row, null_row)
 
 
-def randomised_imputer(df, max_dummies=100, use_dummies=True):
+def randomised_imputer(df, max_dummies=100, use_dummies=True, fill_value=-1, verbose=False):
     # First we impute missing values / NaN's
     df_keys_orig = df.keys()
 
@@ -47,7 +47,8 @@ def randomised_imputer(df, max_dummies=100, use_dummies=True):
             # First we take care of missing values
             df_tmp_len = len(df[df_col.isnull()])
             if df_tmp_len>0:
-                print "Filling for", df_tmp_len, "NaNs in object data", df_col_name
+                if verbose:
+                    print("Filling for", df_tmp_len, "NaNs in object data", df_col_name)
                 # There's few enough to do a randomised imputation...
                 df.loc[df_col.isnull(), df_col_name] = np.random.choice(df_col.value_counts().keys().ravel(), size=df_tmp_len,
                                  p = df_col.value_counts(normalize=True).ravel() / df_col.value_counts(normalize=True).ravel().sum() )
@@ -57,10 +58,11 @@ def randomised_imputer(df, max_dummies=100, use_dummies=True):
                 #df.loc[df_col.isnull(), df_col_name] = df_col.value_counts().keys()[0]
                 # Mean
                 #df.loc[df_col.isnull(), df_col_name] = df_col.mean()
-                
+            
             # Now fill with dummies or factorise
             if n_uniques < max_dummies and use_dummies:
-                print "Adding", n_uniques, "dummies for", df_col_name
+                if verbose:
+                    print("Adding", n_uniques, "dummies for", df_col_name)
                 df_dum = pd.get_dummies(df_col, prefix=df_col_name)
 
                 # There's not *too* many encodings, so we replace the 
@@ -68,7 +70,8 @@ def randomised_imputer(df, max_dummies=100, use_dummies=True):
                 df = df.drop([df_col_name], axis=1)
                 df = pd.concat([df, df_dum], axis=1)
             else:
-                print "Numerising", df_col_name
+                if verbose:
+                    print("Numerising", df_col_name)
                 # If there's too many unique values, just make it numerical
                 [df_fac, df_lab] = pd.factorize(df[df_col_name])
                 df[df_col_name] = df_fac
@@ -77,8 +80,12 @@ def randomised_imputer(df, max_dummies=100, use_dummies=True):
             # NOTE I'D REALLY LIKE TO HAVE A DISTRIBUTION BASED RANDOMISED
             # ROUTINE - USE KERNEL DENSITY ESTIMATION FROM SCIKIT LEARN...
             tmp_len = len(df[df_col.isnull()])
-            print "Filling for", tmp_len, "NaNs in data", df_col_name
+            if verbose:
+                print("Filling for", tmp_len, "NaNs in data", df_col_name)
             if tmp_len>0:
-                df.loc[df_col.isnull(), df_col_name] = df_col.mean()
+                #df.loc[df_col.isnull(), df_col_name] = df_col.mean()
+                df.loc[df_col.isnull(), df_col_name] = fill_value
 
     return df
+
+
